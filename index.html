@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>우리반 오목</title>
+<style>
+:root{
+  --wood:#e9c98e; --wood-line:#3b2a17; --ink:#1d1b19; --paper:#fffaf0; --accent:#8a3b12; --win:#d23b1f;
+  --font:system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:#f4ead6;color:var(--ink);font-family:var(--font);display:flex;flex-direction:column;align-items:center;-webkit-user-select:none;user-select:none}
+header{width:100%;max-width:760px;padding:10px 14px 6px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+h1{margin:0;font-size:22px}
+.players{width:100%;max-width:760px;padding:0 14px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pl{display:flex;align-items:center;gap:10px;background:#fff;border:3px solid transparent;border-radius:14px;padding:8px 12px;font-weight:700;font-size:18px}
+.pl.turn{border-color:var(--ink);box-shadow:0 3px 0 rgba(0,0,0,.2)}
+.pl .tag{font-size:13px;font-weight:700;opacity:.7;margin-left:auto}
+.st{width:24px;height:24px;border-radius:50%;flex:none}
+.st.b{background:radial-gradient(circle at 35% 30%,#666,#111 60%)}
+.st.w{background:radial-gradient(circle at 35% 30%,#fff,#d8d2c4 75%);box-shadow:inset 0 0 0 1.5px #9d927c}
+#wrap{flex:1;width:100%;display:flex;align-items:center;justify-content:center;padding:8px;min-height:0}
+canvas{background:var(--wood);border-radius:10px;box-shadow:0 6px 18px rgba(60,35,10,.25);touch-action:manipulation;max-width:100%;max-height:100%}
+.bar{width:100%;max-width:760px;padding:0 14px 12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+button{font-family:var(--font);font-size:16px;font-weight:700;border:2px solid var(--ink);background:#fff;color:var(--ink);border-radius:12px;padding:10px 16px;cursor:pointer;min-height:44px}
+button.primary{background:var(--ink);color:#fff}
+button:disabled{opacity:.35;cursor:not-allowed}
+button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.overlay{position:fixed;inset:0;background:rgba(25,15,5,.55);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+.panel{background:var(--paper);border:3px solid var(--ink);border-radius:18px;padding:22px;width:100%;max-width:420px;display:flex;flex-direction:column;gap:14px}
+.panel h2{margin:0;font-size:26px;text-align:center}
+.panel label{font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.panel input[type=text]{width:100%;font-family:var(--font);font-size:20px;padding:10px 12px;border:2px solid var(--ink);border-radius:10px;-webkit-user-select:text;user-select:text}
+.note{font-size:13px;opacity:.75;text-align:center;margin:0}
+.result .big{font-size:34px;font-weight:800;text-align:center;line-height:1.25}
+.result .meta{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:16px;background:#fff;border-radius:12px;padding:12px 14px}
+.result .meta b{opacity:.65}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row button{flex:1}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>우리반 오목</h1>
+  <div id="moves" style="font-size:14px;font-weight:700;opacity:.7">0수</div>
+</header>
+<div class="players">
+  <div class="pl" id="pB"><span class="st b"></span><span id="nB">흑</span><span class="tag">흑 · 먼저</span></div>
+  <div class="pl" id="pW"><span class="st w"></span><span id="nW">백</span><span class="tag">백</span></div>
+</div>
+<div id="wrap"><canvas id="cv" aria-label="오목판"></canvas></div>
+<div class="bar">
+  <button id="undo">한 수 무르기</button>
+  <button id="giveup">기권</button>
+  <button id="newg">새 게임</button>
+</div>
+
+<div class="overlay" id="start">
+  <form class="panel" id="startForm">
+    <h2>누구랑 두나요?</h2>
+    <div><label for="inB"><span class="st b"></span>흑 (먼저 둬요)</label><input type="text" id="inB" maxlength="10" placeholder="이름" autocomplete="off"></div>
+    <div><label for="inW"><span class="st w"></span>백</label><input type="text" id="inW" maxlength="10" placeholder="이름" autocomplete="off"></div>
+    <button class="primary" type="submit">시작!</button>
+    <p class="note">가로·세로·대각선으로 다섯 개를 먼저 이으면 이겨요.</p>
+  </form>
+</div>
+
+<div class="overlay hidden" id="ask">
+  <div class="panel">
+    <h2 id="askT"></h2>
+    <div class="row"><button id="askNo">아니요</button><button class="primary" id="askYes">네</button></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="end">
+  <div class="panel result">
+    <div class="big" id="endBig"></div>
+    <div class="meta" id="endMeta"></div>
+    <p class="note">이 화면을 두 사람이 함께 선생님께 보여 주세요.</p>
+    <div class="row"><button id="seeBoard">판 다시 보기</button><button class="primary" id="again">새 게임</button></div>
+  </div>
+</div>
+
+<script>
+(function(){
+var N=15, board, moves, turn, over, names={1:'흑',2:'백'}, winLine=null, winner=0, how='';
+var cv=document.getElementById('cv'), ctx=cv.getContext('2d'), size=600, cell, pad;
+function $(id){return document.getElementById(id);}
+
+function reset(){
+  board=[]; for(var i=0;i<N;i++){board.push(new Array(N).fill(0));}
+  moves=[]; turn=1; over=false; winLine=null; winner=0; how='';
+  ui(); draw();
+}
+function ui(){
+  $('nB').textContent=names[1]; $('nW').textContent=names[2];
+  $('pB').classList.toggle('turn',!over&&turn===1);
+  $('pW').classList.toggle('turn',!over&&turn===2);
+  $('moves').textContent=moves.length+'수';
+  $('undo').disabled=over||moves.length===0;
+  $('giveup').disabled=over||moves.length===0;
+}
+function resize(){
+  var w=$('wrap'), avail=Math.max(200,Math.min(w.clientWidth-16,w.clientHeight-16));
+  size=avail; var dpr=window.devicePixelRatio||1;
+  cv.style.width=size+'px'; cv.style.height=size+'px';
+  cv.width=Math.round(size*dpr); cv.height=Math.round(size*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  pad=size/(N+1); cell=(size-2*pad)/(N-1);
+  draw();
+}
+function P(i){return pad+i*cell;}
+function draw(){
+  if(!board) return;
+  ctx.clearRect(0,0,size,size);
+  ctx.strokeStyle='#3b2a17';
+  for(var i=0;i<N;i++){
+    ctx.lineWidth=(i===0||i===N-1)?2:1;
+    ctx.beginPath();ctx.moveTo(P(0),P(i));ctx.lineTo(P(N-1),P(i));ctx.stroke();
+    ctx.beginPath();ctx.moveTo(P(i),P(0));ctx.lineTo(P(i),P(N-1));ctx.stroke();
+  }
+  ctx.fillStyle='#3b2a17';
+  [[3,3],[3,11],[11,3],[11,11],[7,7]].forEach(function(s){ctx.beginPath();ctx.arc(P(s[0]),P(s[1]),Math.max(2.5,cell*.12),0,Math.PI*2);ctx.fill();});
+  var r=cell*0.45;
+  for(var y=0;y<N;y++)for(var x=0;x<N;x++){
+    var v=board[y][x]; if(!v) continue;
+    var cx=P(x), cy=P(y);
+    var g=ctx.createRadialGradient(cx-r*.35,cy-r*.4,r*.1,cx,cy,r);
+    if(v===1){g.addColorStop(0,'#6a6a6a');g.addColorStop(1,'#101010');}
+    else{g.addColorStop(0,'#ffffff');g.addColorStop(1,'#d6cfbf');}
+    ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+    if(v===2){ctx.lineWidth=1;ctx.strokeStyle='#9d927c';ctx.stroke();}
+  }
+  if(moves.length&&!winLine){
+    var m=moves[moves.length-1];
+    ctx.beginPath();ctx.arc(P(m.x),P(m.y),r*.28,0,Math.PI*2);ctx.fillStyle='#d23b1f';ctx.fill();
+  }
+  if(winLine){
+    ctx.lineWidth=Math.max(3,cell*.14);ctx.strokeStyle='rgba(210,59,31,.9)';ctx.lineCap='round';
+    var a=winLine[0], b=winLine[winLine.length-1];
+    ctx.beginPath();ctx.moveTo(P(a[0]),P(a[1]));ctx.lineTo(P(b[0]),P(b[1]));ctx.stroke();
+  }
+}
+function lineAt(x,y,c){
+  var dirs=[[1,0],[0,1],[1,1],[1,-1]];
+  for(var d=0;d<4;d++){
+    var dx=dirs[d][0], dy=dirs[d][1], line=[[x,y]];
+    for(var k=1;;k++){var nx=x+dx*k, ny=y+dy*k; if(nx<0||ny<0||nx>=N||ny>=N||board[ny][nx]!==c) break; line.push([nx,ny]);}
+    for(var k2=1;;k2++){var px=x-dx*k2, py=y-dy*k2; if(px<0||py<0||px>=N||py>=N||board[py][px]!==c) break; line.unshift([px,py]);}
+    if(line.length>=5) return line;
+  }
+  return null;
+}
+function place(x,y){
+  if(over||board[y][x]) return;
+  board[y][x]=turn; moves.push({x:x,y:y,c:turn});
+  var l=lineAt(x,y,turn);
+  if(l){winLine=l; finish(turn,'다섯 개 연결');}
+  else if(moves.length===N*N){finish(0,'판이 꽉 참');}
+  else{turn=3-turn;}
+  ui(); draw();
+}
+function finish(w,reason){
+  over=true; winner=w; how=reason; ui(); draw();
+  var d=new Date();
+  var when=(d.getMonth()+1)+'월 '+d.getDate()+'일 '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  $('endBig').textContent= w? names[w]+' 승!' : '무승부';
+  var meta='';
+  if(w){ meta+='<b>이긴 사람</b><span>'+esc(names[w])+' ('+(w===1?'흑':'백')+')</span><b>진 사람</b><span>'+esc(names[3-w])+' ('+(w===1?'백':'흑')+')</span>'; }
+  else { meta+='<b>흑</b><span>'+esc(names[1])+'</span><b>백</b><span>'+esc(names[2])+'</span>'; }
+  meta+='<b>결과</b><span>'+how+' · '+moves.length+'수</span><b>시간</b><span>'+when+'</span>';
+  $('endMeta').innerHTML=meta;
+  setTimeout(function(){show('end');},w&&how==='다섯 개 연결'?700:0);
+}
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function show(id){['start','ask','end'].forEach(function(k){$(k).classList.toggle('hidden',k!==id);});}
+function hideAll(){show('__none');}
+var askFn=null;
+function ask(t,fn){$('askT').textContent=t; askFn=fn; show('ask');}
+
+cv.addEventListener('click',function(e){
+  if(over){show('end');return;}
+  var rect=cv.getBoundingClientRect(), x=e.clientX-rect.left, y=e.clientY-rect.top;
+  var gx=Math.round((x-pad)/cell), gy=Math.round((y-pad)/cell);
+  if(gx<0||gy<0||gx>=N||gy>=N) return;
+  if(Math.hypot(x-P(gx),y-P(gy))>cell*0.5) return;
+  place(gx,gy);
+});
+$('undo').onclick=function(){ ask('한 수 무를까요? 상대도 괜찮다고 했나요?',function(){var m=moves.pop(); if(m){board[m.y][m.x]=0; turn=m.c;} ui(); draw();}); };
+$('giveup').onclick=function(){ ask(names[turn]+' 기권할까요?',function(){ finish(3-turn,names[turn]+' 기권'); }); };
+$('newg').onclick=function(){ if(moves.length&&!over) ask('지금 게임을 그만두고 새로 시작할까요?',openStart); else openStart(); };
+$('askNo').onclick=function(){ hideAll(); askFn=null; if(over) show('end'); };
+$('askYes').onclick=function(){ var f=askFn; askFn=null; hideAll(); if(f) f(); };
+$('again').onclick=openStart;
+$('seeBoard').onclick=function(){ hideAll(); };
+function openStart(){
+  $('inB').value= over&&names[2]!=='백' ? names[2] : (names[1]==='흑'?'':names[1]);
+  $('inW').value= over&&names[1]!=='흑' ? names[1] : (names[2]==='백'?'':names[2]);
+  show('start'); setTimeout(function(){$('inB').focus();},50);
+}
+$('startForm').addEventListener('submit',function(e){
+  e.preventDefault();
+  var b=$('inB').value.trim(), w=$('inW').value.trim();
+  if(!b||!w){ (b?$('inW'):$('inB')).focus(); return; }
+  if(b===w){ $('inW').focus(); return; }
+  names={1:b,2:w}; hideAll(); reset();
+});
+window.addEventListener('resize',resize);
+reset(); resize();
+setTimeout(function(){$('inB').focus();},50);
+})();
+</script>
+</body>
+</html>
